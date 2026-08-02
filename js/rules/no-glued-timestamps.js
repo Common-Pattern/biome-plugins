@@ -1,13 +1,60 @@
 /**
  * Ban gluing a timestamp together from a date string, AT THE CALL SITE.
  *
- * Direct port of `../../biome/no-glued-timestamps.grit` — that file's rationale
- * for each branch is the authority and is not repeated here. The branches are
- * the same six; what changed is how "glued" is decided (see `../lib/glue.js`:
- * a shape derived from the AST rather than a regex over source text).
+ * `` `${dayKey}T00:00:00Z` `` and its noon-anchored cousin
+ * `` `${dayKey}T12:00:00Z` `` hide two different mistakes.
  *
- * The variable-indirection case that this rule explicitly gives up on lives in
- * its sibling, `no-glued-timestamp-via-variable`.
+ * **The interpolation hides the timezone question.** A glued
+ * `` `${date}T00:00:00` `` with no `Z` parses in whatever zone the runtime
+ * happens to be in, which is the server's — not the user's, and not the
+ * tenant's. `toDate(date, { timeZone })` from `date-fns-tz` has nowhere to put
+ * that mistake, because the zone is a required argument rather than an accident
+ * of deployment.
+ *
+ * **The noon anchor hides a category error.** It exists because
+ * `` `${key}T00:00:00Z` `` renders as the *previous* day for any zone west of
+ * UTC, so someone moved the anchor to noon to buy ±12h of slack. That is a fix
+ * sized to the zones its author had in mind: at UTC+13/+14 (Pacific/Apia,
+ * Pacific/Kiritimati) noon UTC is already the next day, and it renders
+ * tomorrow. The deeper problem is that a day key has no instant behind it at
+ * all — "28 July" is a calendar fact, not a moment — so asking which zone to
+ * project it into is asking the wrong question.
+ *
+ * WHAT TO USE INSTEAD
+ *   - rendering a bare `date` column or day key -> format it with no timezone
+ *     at all. The date that goes in is the date that comes out.
+ *   - a day key -> an instant -> `toDate(key, { timeZone })` from
+ *     `date-fns-tz`. A parser, not string surgery.
+ *   - a `Date` for a consumer that reads LOCAL fields (react-day-picker, and
+ *     anything calling `getDate`/`getDay`) -> `parseISO(key)`.
+ *   - comparing or bucketing day keys -> compare the strings. `yyyy-MM-dd`
+ *     sorts lexicographically in chronological order, so building a `Date` to
+ *     compare two of them is overhead and one more place for a zone to creep in.
+ *
+ * THE OFFSET VARIANT. `` new Date(`${s}+05:30`) `` is the same habit with the
+ * zone spelled as a number, and it is the more tempting one because it looks
+ * deliberate — the author clearly thought about timezones. What they wrote down
+ * is a fact with an expiry date: an offset is the tz database's current answer
+ * for a zone, not the zone itself. Zones change their offsets (Egypt reinstated
+ * DST in 2023; Chile, Morocco and Samoa have all moved), and when one does, an
+ * IANA name is a package update while a literal offset is a code edit nobody
+ * knows to make.
+ *
+ * The offset branches are restricted to `new Date` and `toDate` on purpose.
+ * `` `${x}-10:30` `` is not inherently date-shaped — it could be a range label
+ * — so the enclosing call is what makes the intent unambiguous.
+ *
+ * `toDate` gets its own message because it fails differently: an embedded
+ * offset takes PRECEDENCE over the `timeZone` option, so the argument the
+ * author passed is silently discarded rather than merely redundant.
+ *
+ * SCOPE. This matches the call shapes glued timestamps actually take, rather
+ * than every template literal — so prose in doc comments (including the ones
+ * explaining this rule) is untouched. How "glued" is decided lives in
+ * `../lib/glue.js`: a shape derived from the AST, not a regex over source text.
+ *
+ * The variable-indirection case that this rule gives up on lives in its
+ * sibling, `no-glued-timestamp-via-variable`.
  */
 
 import { isAssembledString, isGluedDateTime, isGluedOffset } from "../lib/glue.js";

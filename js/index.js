@@ -1,7 +1,7 @@
 /**
  * `@common-pattern/lint` — the JavaScript flavour.
  *
- * Six rules, written as plain ESLint rule objects. Oxlint's JS plugin host
+ * Seven rules, written as plain ESLint rule objects. Oxlint's JS plugin host
  * implements the ESLint v9 rule API, so the same objects run under either
  * linter unmodified; nothing here imports from oxlint or from ESLint.
  *
@@ -10,18 +10,8 @@
  * trading one lock-in for another. These move to ESLint by changing the config
  * that loads them, and nothing else.
  *
- * Three of the six are ports of the GritQL plugins in `../biome`. Three exist
- * only here. Two of those because GritQL structurally cannot express them:
- *
- *   - `no-glued-timestamp-via-variable` needs scope resolution, to tell one
- *     binding from a same-named binding in a sibling function.
- *   - `no-suppressions` needs to see comments, which are not in the AST that
- *     GritQL queries.
- *
- * The third, `no-style-prop`, is JS-only for the ordinary reason: `biome/` is
- * frozen at parity and new rules land here.
- *
- * See the README for what each rule bans and why.
+ * Each rule carries its own reasoning at the top of its file — what bug it
+ * prevents, not just what it matches. The README is the shorter tour.
  */
 
 import noDoubleAssertion from "./rules/no-double-assertion.js";
@@ -30,6 +20,7 @@ import noGluedTimestamps from "./rules/no-glued-timestamps.js";
 import noStyleProp from "./rules/no-style-prop.js";
 import noSuppressions from "./rules/no-suppressions.js";
 import noUtcCalendarDay from "./rules/no-utc-calendar-day.js";
+import noZonelessLocaleFormat from "./rules/no-zoneless-locale-format.js";
 
 export default {
   meta: { name: "common-pattern" },
@@ -40,5 +31,6 @@ export default {
     "no-double-assertion": noDoubleAssertion,
     "no-suppressions": noSuppressions,
     "no-style-prop": noStyleProp,
+    "no-zoneless-locale-format": noZonelessLocaleFormat,
   },
 };
