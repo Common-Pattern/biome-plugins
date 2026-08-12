@@ -18,11 +18,11 @@ enforce them take completely different plugin formats.
 | --- | --- | --- |
 | format | ESLint rule objects | GritQL patterns |
 | runs under | **oxlint**, ESLint | **Biome** |
-| rules | all five | three |
+| rules | all six | three |
 | status | primary — new rules go here | frozen at parity |
 
-**Use `js/` unless you can't.** It carries two rules the GritQL flavour cannot
-express at all (see the table below), it is ~4.6× faster than the same three
+**Use `js/` unless you can't.** It carries three rules the GritQL flavour does not
+have (see the table below), it is ~4.6× faster than the same three
 rules under Biome's GritQL engine, and — the part that matters most — it is
 portable. These are plain ESLint rule objects; nothing in them imports from
 oxlint or from ESLint, so the same files run under either. Oxlint's JS plugin
@@ -45,6 +45,7 @@ exactly on the three shared rules, and you would get every diagnostic twice.
 | [`no-double-assertion`](#no-double-assertion) | ✅ | ✅ |
 | [`no-glued-timestamp-via-variable`](#no-glued-timestamp-via-variable) | ✅ | — needs scope resolution |
 | [`no-suppressions`](#no-suppressions) | ✅ | — needs to see comments |
+| [`no-style-prop`](#no-style-prop) | ✅ | — `biome/` is frozen at parity |
 
 ### `no-utc-calendar-day`
 
@@ -244,6 +245,52 @@ common-pattern/no-suppressions` works, and oxlint has no `noInlineConfig` to
 close that. And it reports its own source file, which mentions every directive
 it bans; consumers never see this, because `node_modules` is ignored by default.
 
+### `no-style-prop`
+
+Bans the JSX `style` prop.
+
+This one is for a codebase that has committed to a component library, where
+every spacing, colour and size is meant to come from the library's own
+vocabulary. There, an inline `style` is not a small local override — it is a
+second styling system with one member, and it grows.
+
+**Why a rule and not a convention.** Because the convention demonstrably
+failed. In the codebase this was written for, the project's own conventions
+file asserted there was "no `style={{…}}` anywhere" in the app directory. There
+were twenty. Nobody had been careless: each arrived with a paragraph of
+measured justification, which is exactly why none of them looked like the thing
+the convention was meant to stop.
+
+**Why a grep is not enough, and this is the part that matters.** The obvious
+search is `style={{`, and it is wrong. Half the real usages were
+`style={columnWidth}` or `style={SEARCH_INPUT_STYLE}` — hoisted to a constant,
+often *because* they were shared across call sites and therefore the most
+entrenched. A text search finds the casual ones and misses the load-bearing
+ones, which inverts the priority. Matching `JSXAttribute` by name catches every
+spelling, because the attribute's value is never inspected:
+
+```jsx
+<Table style={{ minWidth: 1180 }} />   // found by a grep
+<Table style={COLUMN_WIDTH} />          // not found by a grep
+<Table style={styles.row} />            // not found by a grep
+<Table style={cond ? a : b} />          // not found by a grep
+```
+
+**What to use instead.** A prop the component already has — ask the library's
+CLI or its `.d.ts` rather than recalling it, since layout, spacing and width
+are usually among them. A token or variant, where the value is a design
+decision rather than a measurement. Or, for the genuine residue an inline style
+could never express anyway — pseudo-classes, media queries, fixed positioning —
+a colocated `Foo.module.css`, scoped and next to its component.
+
+**Holes it leaves.** `<Foo {...{ style: x }} />` and `<Foo {...props} />` are
+not caught; the rule reads attribute names, not data flow, and spreading a
+style to evade a linter is a deliberate act rather than an accident.
+`className` is not caught **deliberately** — it is the seam a CSS Module needs,
+so banning it would ban the rule's own recommended alternative. And a prop
+named `style` on a non-visual component matches too; that is the cost of a
+name-based rule, and `overrides` can scope it off for such a directory.
+
 ## Install
 
 ```jsonc
@@ -277,7 +324,8 @@ it bans; consumers never see this, because `node_modules` is ignored by default.
     "common-pattern/no-glued-timestamps": "error",
     "common-pattern/no-glued-timestamp-via-variable": "error",
     "common-pattern/no-double-assertion": "error",
-    "common-pattern/no-suppressions": "error"
+    "common-pattern/no-suppressions": "error",
+    "common-pattern/no-style-prop": "error"
   }
 }
 ```
@@ -303,6 +351,7 @@ export default [
       "common-pattern/no-glued-timestamp-via-variable": "error",
       "common-pattern/no-double-assertion": "error",
       "common-pattern/no-suppressions": "error",
+      "common-pattern/no-style-prop": "error",
     },
   },
 ];

@@ -14,6 +14,7 @@
     "common-pattern/no-glued-timestamps": "error",
     "common-pattern/no-glued-timestamp-via-variable": "error",
     "common-pattern/no-double-assertion": "error",
-    "common-pattern/no-suppressions": "error"
+    "common-pattern/no-suppressions": "error",
+    "common-pattern/no-style-prop": "error"
   }
 }
