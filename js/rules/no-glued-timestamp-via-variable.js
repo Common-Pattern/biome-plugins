@@ -2,8 +2,8 @@
  * Ban a glued timestamp that reaches a timezone-sensitive consumer THROUGH A
  * VARIABLE.
  *
- * This is the rule `../../biome/no-glued-timestamps.grit` documents itself as
- * unable to write:
+ * This is the rule the earlier GritQL implementation of `no-glued-timestamps`
+ * documented itself as unable to write:
  *
  *   > It is expressible … but GritQL has no scope resolution, so the match is
  *   > by NAME across the whole file. A `value` glued into a label in one

@@ -2,12 +2,46 @@
  * Ban deriving a calendar date from an instant with `.toISOString().slice(…)`
  * or `.toISOString().split(…)`.
  *
- * Direct port of `../../biome/no-utc-calendar-day.grit`; the rationale there is
- * the authority and is not repeated. The mechanics differ in one way worth
- * knowing: GritQL matched the snippet `$instant.toISOString().slice($_)`,
- * which pins the arity of `slice` to exactly one argument. This matches any
- * arity, so `.toISOString().slice(0, 10)` and `.toISOString().slice(0)` are
- * both caught by one branch instead of needing a pattern each.
+ * It reads as "today". It means *the UTC calendar day* — a different day from
+ * the user's or the tenant's for a window as wide as their UTC offset: 05:30
+ * every morning for Asia/Kolkata, the whole evening for the Americas. Such a
+ * value is then typically compared against a `date` column, which holds a local
+ * calendar date, so the comparison runs across two different calendars.
+ *
+ * This is unusually good at hiding. Test suites commonly pin `TZ=UTC`,
+ * production is commonly a UTC datacentre, and nobody develops at 03:00 — so
+ * the expression is right in every context anyone inspects it in, and wrong
+ * only in the answer given to the user.
+ *
+ * WHAT TO USE INSTEAD
+ *   - "today, for this tenant" -> `formatInTimeZone(new Date(), timeZone,
+ *     "yyyy-MM-dd")` from `date-fns-tz`.
+ *   - "the calendar day this instant falls on" -> the same, passing the
+ *     instant.
+ *   - shifting a `yyyy-MM-dd` key -> calendar arithmetic on the key, never
+ *     `addDays` on an instant: adding 24h drifts across a DST boundary.
+ *
+ * SCOPE. Only string surgery applied directly to a `.toISOString()` result
+ * matches. The bare form — `row.created_at.slice(0, 10)` on a string column —
+ * is deliberately not matched: it is indistinguishable at the AST level from
+ * `array.slice(0, 10)` meaning "the first ten", and a rule that needs
+ * suppressions to pass is worse than no rule.
+ *
+ * THE `.split("T")` SPELLING. `.toISOString().split("T")[0]` is the same bug
+ * wearing different clothes, and it cost real debugging time *after* the
+ * `.slice` form was banned — the rule looked like it covered the class, and
+ * covered one spelling of it. Both halves of the split are wrong for the same
+ * reason: `[0]` is the UTC calendar day, `[1]` is the UTC wall clock. The
+ * receiver is what makes this unambiguous, so no argument check is needed —
+ * `formatInTimeZone(instant, tz, "yyyy-MM-dd HH:mm").split(" ")` has already
+ * chosen a zone and stays legal.
+ *
+ * A rule per spelling would keep losing that race, so both branches live in one
+ * rule: the objection is to deriving a calendar day from an ISO string at all,
+ * not to a particular string method.
+ *
+ * Matching any arity of `slice` means `.slice(0, 10)` and `.slice(0)` are both
+ * caught by one branch.
  */
 
 const BANNED_METHODS = new Set(["slice", "split"]);

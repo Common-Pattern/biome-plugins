@@ -1,7 +1,7 @@
 {
   "name": "@common-pattern/lint",
-  "version": "0.2.0",
-  "description": "Lint rules for conventions that are easy to state and easy to forget — ESLint-shaped rules for oxlint, plus a GritQL flavour for Biome",
+  "version": "0.3.0",
+  "description": "Lint rules for conventions that are easy to state and easy to forget — ESLint-shaped rules for oxlint and ESLint",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -12,8 +12,6 @@
     "oxlint",
     "eslint",
     "eslint-plugin",
-    "biome",
-    "gritql",
     "lint",
     "static-analysis",
     "conventions",
@@ -26,16 +24,13 @@
   },
   "files": [
     "js",
-    "biome",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "build": "node scripts/build-all.mjs",
     "test": "./test/run.sh"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.0",
     "oxlint": "^1.76.0"
   }
 }

@@ -3,27 +3,28 @@
  *
  * "Never suppress — fix the root cause" is a convention almost every codebase
  * states somewhere and almost none enforces, for a mechanical reason: the
- * suppressions are comments. GritQL cannot match comments at all, because they
- * are not in the AST it queries, and Biome ships no rule banning its own
- * `biome-ignore`. So the convention has only ever been enforceable by review,
- * which means it holds for as long as the reviewer remembers.
+ * suppressions are comments, and most linters give a rule no way to see them.
+ * So the convention has only ever been enforceable by review, which means it
+ * holds for as long as the reviewer remembers.
  *
  * An ESLint-shaped rule gets `sourceCode.getAllComments()`, so it is
  * enforceable here.
  *
- * This is not a nice-to-have alongside the other four. Oxlint's own disable
+ * This is not a nice-to-have alongside the other five. Oxlint's own disable
  * directives DO suppress custom JS-plugin rules — verified: a fixture with
  * `// oxlint-disable-next-line common-pattern/no-glued-timestamp-via-variable`
- * reports nothing, and reports two diagnostics with the directive removed.
- * The GritQL flavour has no such escape hatch, because Biome cannot switch a
- * plugin off for a line or even for a glob. So adopting the JS rules WITHOUT
- * this one would trade a gap in the rules for a gap in the enforcement: every
- * ported rule becomes opt-out, silently, on the day it moves.
+ * reports nothing, and reports two diagnostics with the directive removed. So
+ * adopting these rules WITHOUT this one trades a gap in the rules for a gap in
+ * the enforcement: every one of them silently becomes opt-out.
  *
- * `oxlint-disable`/`eslint-disable` are included for that reason.
- * `@ts-ignore` is here too even though Biome's `noTsIgnore` already covers it,
- * so that this rule is complete on its own if it ever runs somewhere Biome
- * does not.
+ * `oxlint-disable`/`eslint-disable` are included for that reason. `@ts-ignore`
+ * and `biome-ignore` are here too, even where another tool's own rule may
+ * already cover them, so this rule is complete on its own wherever it runs.
+ *
+ * Two honest limits. It cannot protect itself — `// oxlint-disable
+ * common-pattern/no-suppressions` works, and oxlint has no `noInlineConfig`.
+ * And it reports its own source file, which names every directive it bans;
+ * consumers never see that, because `node_modules` is ignored by default.
  */
 
 const PATTERNS = [
