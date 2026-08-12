@@ -27,6 +27,8 @@ EXPECTED_SCOPE_VIOLATIONS=9
 EXPECTED_CALLSITE_GAP=4
 # JS-only, because GritQL cannot match comments at all.
 EXPECTED_SUPPRESSIONS=3
+# JS-only: `biome/` is frozen at parity, so new rules land in `js/` alone.
+EXPECTED_STYLE_VIOLATIONS=12
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
@@ -106,5 +108,11 @@ expect "biome (expected to miss every one)" "$(biome_count test/fixtures/callsit
 echo "==> disable directives silence custom rules, and no-suppressions catches them"
 expect "oxlint (the 3 directives, not the 2 dates they hide)" \
   "$(ox_count test/fixtures/suppression.ts)" "$EXPECTED_SUPPRESSIONS"
+
+echo "==> no-style-prop: every spelling, including the hoisted ones a grep misses"
+expect "oxlint " "$(ox_count test/fixtures/style-violations.tsx)" "$EXPECTED_STYLE_VIOLATIONS"
+
+echo '==> ...and does NOT fire on `style` as a binding, key, param, or on className'
+expect "oxlint " "$(ox_count test/fixtures/style-clean.tsx)" 0
 
 echo "OK"
