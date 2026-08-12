@@ -279,6 +279,14 @@ it was handed is already, unmistakably, formatting a date — it carries a
 date/time key (`dateStyle`, `timeStyle`, `year`, `month`, `day`, `hour`,
 `minute`, `weekday`, …) and no `timeZone`.
 
+Options behind a **computed key** (`{ [zoneKey]: "Asia/Kolkata", … }`) are not
+followed either, and for the same reason as a spread: the key may well be
+`timeZone`, and concluding it is absent would fire on correct code. An
+explicitly-passed `undefined` or `null`, on the other hand, *is* treated as no
+options at all — it renders identically to omitting the argument, and it is how
+the zone goes missing when a wrapper forwards an options argument its caller
+left out.
+
 Not matched, deliberately: a bare `someDate.toLocaleString()` with no options —
 a genuine instance the rule cannot see, and the price of never firing on number
 formatting. Options behind a variable or a spread are not followed either; that

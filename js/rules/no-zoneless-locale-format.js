@@ -38,8 +38,10 @@
  * object it was handed is already, unmistakably, formatting a date: it carries
  * one of the date/time option keys (`dateStyle`, `timeStyle`, `year`, `month`,
  * `day`, `hour`, `minute`, `second`, `weekday`, `era`, `dayPeriod`,
- * `fractionalSecondDigits`, `hour12`, `hourCycle`, `calendar`) and no
- * `timeZone`. A bare `x.toLocaleString()` with no options is left alone; it is
+ * `fractionalSecondDigits`, `hour12`, `hourCycle`, `calendar`,
+ * `timeZoneName`) and no `timeZone`. That list is `DATE_OPTION_KEYS` below and
+ * must stay in step with it — a key in one and not the other is how a reader
+ * ends up trusting prose the code disagrees with. A bare `x.toLocaleString()` with no options is left alone; it is
  * far more often a number than a date, and a rule that cried wolf on number
  * formatting would be switched off within a week.
  *
@@ -89,6 +91,17 @@ function objectLiteral(node) {
   return node?.type === "ObjectExpression" ? node : null;
 }
 
+/**
+ * "No options were supplied" — the omitted argument, and the two literal
+ * spellings that mean the same thing to `Intl`. `undefined` parses as an
+ * `Identifier`; `null` as a `Literal` whose value is null.
+ */
+function isAbsentOptions(node) {
+  if (node === undefined) return true;
+  if (node.type === "Identifier" && node.name === "undefined") return true;
+  return node.type === "Literal" && node.value === null;
+}
+
 /** The static key of a property, or null for computed/spread/dynamic ones. */
 function staticKeyName(prop) {
   if (prop.type !== "Property" || prop.computed) return null;
@@ -112,9 +125,16 @@ function keyNames(objectExpression) {
  * A spread (`{ ...base, dateStyle: "medium" }`) could be carrying `timeZone` in
  * from somewhere this rule cannot see. Staying silent is the honest answer —
  * the alternative is a false positive on correct code.
+ *
+ * A COMPUTED KEY IS THE SAME HAZARD AND IS TREATED THE SAME WAY.
+ * `{ [zoneKey]: "Asia/Kolkata", dateStyle: "medium" }` may well be supplying
+ * `timeZone`; `staticKeyName` returns null for it, so without this the rule
+ * would conclude the zone was absent and fire on correct code. That is the one
+ * direction this rule set will not trade — a false negative is a missed bug, a
+ * false positive is a rule someone switches off.
  */
-function hasSpread(objectExpression) {
-  return objectExpression.properties.some((p) => p.type === "SpreadElement");
+function hasUnreadableKey(objectExpression) {
+  return objectExpression.properties.some((p) => p.type === "SpreadElement" || (p.type === "Property" && p.computed));
 }
 
 /** `Intl.DateTimeFormat` / `new Intl.DateTimeFormat`, in either spelling. */
@@ -150,14 +170,21 @@ export default {
       const literal = objectLiteral(options);
 
       // No options at all: only decidable for the Date-only methods.
+      //
+      // `isAbsentOptions` and not `options === undefined`, because
+      // `d.toLocaleDateString("en-IN", undefined)` is the same call as
+      // `d.toLocaleDateString("en-IN")` — it renders in the ambient zone
+      // identically. The explicit spelling turns up when the argument is
+      // forwarded (`fmt(d, locale, opts)` with `opts` defaulted), which is
+      // exactly where the zone goes missing without anyone noticing.
       if (literal === null) {
-        if (options === undefined && !requireDateKeys) {
+        if (isAbsentOptions(options) && !requireDateKeys) {
           context.report({ node, message: MESSAGE });
         }
         return;
       }
 
-      if (hasSpread(literal)) return;
+      if (hasUnreadableKey(literal)) return;
 
       const keys = keyNames(literal);
       if (keys.has("timeZone")) return;

@@ -41,3 +41,22 @@ export function intlDateTimeFormatWithoutAZone(instant: Date) {
 export function quotedOptionKeysAreStillKeys(instant: Date) {
   return instant.toLocaleString("en-IN", { "dateStyle": "medium" }); // no-zoneless-locale-format
 }
+
+export function explicitlyUndefinedOptionsAreStillNoOptions(instant: Date) {
+  // Identical to omitting the argument: both render in the ambient zone. The
+  // explicit spelling shows up when the argument is forwarded from a wrapper
+  // whose caller left it out, which is exactly where the zone goes missing
+  // without anyone noticing.
+  const a = instant.toLocaleDateString("en-IN", undefined); // no-zoneless-locale-format
+  const b = instant.toLocaleTimeString("en-IN", undefined); // no-zoneless-locale-format
+  // A bare `null`: the fixture is linted, not compiled, and this is what a
+  // wrapper forwarding an unset options argument actually passes.
+  const c = instant.toLocaleDateString("en-IN", null); // no-zoneless-locale-format
+  return [a, b, c];
+}
+
+export function timeZoneNameIsNotATimeZone(instant: Date) {
+  // `timeZoneName` only chooses how the zone is LABELLED ("IST", "GMT+5:30").
+  // It is date evidence, not a zone, so this still renders in the ambient one.
+  return instant.toLocaleString("en-IN", { timeZoneName: "short" }); // no-zoneless-locale-format
+}

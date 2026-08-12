@@ -70,3 +70,21 @@ export function numberFormatIsADifferentConstructor(amount: number) {
     new Intl.ListFormat("en-IN").format(["a", "b"]),
   ];
 }
+
+export function computedOptionKeysAreNotFollowed(instant: Date, zoneKey: string) {
+  // `zoneKey` may well be "timeZone". `staticKeyName` cannot read a computed
+  // key, so concluding the zone is absent would fire on correct code — the one
+  // direction this rule set will not trade. Same hazard as the spread above,
+  // same answer.
+  return instant.toLocaleString("en-IN", { [zoneKey]: "Asia/Kolkata", dateStyle: "medium" });
+}
+
+export function computedKeyOnADateOnlyMethodIsAlsoSilent(instant: Date, key: string) {
+  return instant.toLocaleDateString("en-IN", { [key]: "Asia/Kolkata" });
+}
+
+export function explicitlyAbsentOptionsOnToLocaleStringStaySilent(amount: number) {
+  // `toLocaleString` is the ambiguous one — with no readable date key this is
+  // far more often a number, which is why it needs evidence before firing.
+  return [amount.toLocaleString("en-IN", undefined), amount.toLocaleString("en-IN")];
+}
