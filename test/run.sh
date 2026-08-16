@@ -19,6 +19,7 @@ EXPECTED_CALLSITE_GAP=4
 EXPECTED_SUPPRESSIONS=3
 EXPECTED_LOCALE_VIOLATIONS=15
 EXPECTED_STYLE_VIOLATIONS=12
+EXPECTED_WIDTH_VIOLATIONS=16
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
@@ -79,5 +80,11 @@ expect "style-violations.tsx" "$(ox_count test/fixtures/style-violations.tsx)" "
 
 echo '==> ...and does NOT fire on `style` as a binding, key, param, or on className'
 expect "style-clean.tsx     " "$(ox_count test/fixtures/style-clean.tsx)" 0
+
+echo "==> no-pinned-width: pixels, absolute units, font-relative units, and the hoisted constants a grep misses"
+expect "width-violations.tsx" "$(ox_count test/fixtures/width-violations.tsx)" "$EXPECTED_WIDTH_VIOLATIONS"
+
+echo '==> ...and does NOT fire on relative units, intrinsic keywords, host elements, or a grid reflow floor'
+expect "width-clean.tsx     " "$(ox_count test/fixtures/width-clean.tsx)" 0
 
 echo "OK"
