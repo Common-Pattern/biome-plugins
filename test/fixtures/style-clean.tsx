@@ -48,9 +48,13 @@ export function Clean({ options }: { options: Options }) {
       // The recommended alternative. Must not fire, or the rule bans its own
       // guidance.
       className="member-tabbar"
-      // Real component props that happen to be layout-ish.
-      width={width}
-      maxWidth={640}
+      // Real component props that happen to be layout-ish. They are written
+      // responsively because `no-pinned-width` runs over this corpus too, and
+      // every fixture in this directory has to be clean for every rule but its
+      // own — `width={width}` and `maxWidth={640}` used to sit here and now
+      // belong in `width-violations.tsx`.
+      width="100%"
+      maxWidth="90vw"
       padding={4}
       gap={2}
     >

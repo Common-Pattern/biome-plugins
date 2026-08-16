@@ -39,6 +39,7 @@ them, and nothing else.
 | [`no-suppressions`](#no-suppressions) | every spelling of "ignore this diagnostic" |
 | [`no-zoneless-locale-format`](#no-zoneless-locale-format) | rendering a date with no explicit `timeZone` |
 | [`no-style-prop`](#no-style-prop) | the JSX `style` prop, in any spelling |
+| [`no-pinned-width`](#no-pinned-width) | `width`/`maxWidth`/`minWidth` set to a fixed measure |
 
 ### `no-utc-calendar-day`
 
@@ -340,6 +341,70 @@ ban the rule's own recommended alternative. And a prop named `style` on a
 non-visual component matches too; that is the cost of a name-based rule, and
 `overrides` can scope it off for such a directory.
 
+### `no-pinned-width`
+
+Bans `width`, `maxWidth` and `minWidth` props set to a pixel count, an absolute
+unit, a font-relative unit, or a value the rule cannot read.
+
+This one is for a codebase that has decided layout flows to the viewport by
+default, and that any exception is a design decision somebody takes on purpose
+rather than a number somebody reaches for while building a screen. It is the
+width half of what a spacing scale already does for padding: `padding={6}` is a
+token, `maxWidth={768}` is a measurement, and only one of them survives a
+redesign.
+
+**Why a rule and not a convention.** Same evidence as `no-style-prop`. In the
+codebase this was written for, one afternoon's sweep removed ninety pinned
+widths — `Dialog width={520}` twelve times over, `TextInput width={280}` on
+every search box, a `maxWidth={768}` reading measure on the legal pages, a
+`lib/measures.ts` of shell constants. None arrived carelessly; most had a
+comment above them explaining the number, which is the problem. A justified pin
+reads like a considered decision, so nobody removes it, and the next screen
+copies it. The sweep is cheap. Staying swept is not.
+
+**What counts as responsive.** Values that resolve against something that
+changes: the viewport (`vw`/`vh`, plus the logical, small, large and dynamic
+families), the container (`%`, the `cq*` units), and the intrinsic keywords
+(`auto`, `min-content`, `max-content`, `fit-content()`, `stretch`, and `none`,
+which removes a cap). `calc()`, `min()`, `max()` and `clamp()` pass when every
+term inside them does — so `min(400px, 90vw)` is still a violation, because the
+`px` term is the ceiling that binds on every desktop.
+
+**Font-relative units are banned, and that is the judgement in it.** `rem`,
+`em`, `ch` and `lh` respond to the reader's text size — a real accessibility
+axis, and the reason they are right for typography. They do not respond to the
+viewport. On a width prop, `maxWidth="65ch"` is a fixed measure wearing a
+relative unit: it is the deleted reading measure, re-spelled, and it would sail
+past a rule that only banned `px`. A repo that wants the classic reading measure
+back should decide that once, for every run of text at the same time — which is
+the decision this rule exists to force upward.
+
+**Why a grep is not enough.** `width={520}` is the easy half:
+
+```jsx
+<Dialog width={520} />                     // found by a grep for a digit
+<Card maxWidth="65ch" />                   // not found — no digit-plus-px
+<Popover width="min(400px, 100vw)" />      // not found — looks responsive
+<Card maxWidth={PROSE_WIDTH} />            // not found — and the most entrenched
+```
+
+The last shape is why a value the rule cannot read statically is reported too,
+under its own message. Not because it is certainly a pin, but because a width
+that cannot be checked is a width that is not checked, and a shared constant is
+where these go to hide.
+
+**Holes it leaves.** Heights are out of scope — a pinned height does not stop a
+page reflowing horizontally, and the honest uses are common (a skeleton bar, a
+scroll ceiling on a log viewer); the rule's prop list is the only thing to change
+if a repo wants them. Object properties are not read, which is deliberate: a
+grid's `columns={{ minWidth: 250 }}` is a **reflow threshold** — it says "wrap to
+fewer columns below 250px each", so it *causes* reflow where a `maxWidth`
+prevents it — and the same goes for table column config. That carve-out is also
+this rule's real limit, so pair it with `no-style-prop` to close the inline-style
+route. Host elements are exempt: `<img width={800}>` is an intrinsic dimension,
+and on an image that attribute is what lets the browser reserve the right box
+before the file arrives, so banning it would trade a layout pin for layout shift.
+
 ## Install
 
 ```jsonc
@@ -375,7 +440,8 @@ non-visual component matches too; that is the cost of a name-based rule, and
     "common-pattern/no-double-assertion": "error",
     "common-pattern/no-suppressions": "error",
     "common-pattern/no-zoneless-locale-format": "error",
-    "common-pattern/no-style-prop": "error"
+    "common-pattern/no-style-prop": "error",
+    "common-pattern/no-pinned-width": "error"
   }
 }
 ```
@@ -403,6 +469,7 @@ export default [
       "common-pattern/no-suppressions": "error",
       "common-pattern/no-zoneless-locale-format": "error",
       "common-pattern/no-style-prop": "error",
+      "common-pattern/no-pinned-width": "error",
     },
   },
 ];
@@ -444,7 +511,7 @@ pnpm install
 pnpm test
 ```
 
-Seven fixtures:
+Twelve fixtures:
 
 | fixture | asserts |
 | --- | --- |
@@ -454,8 +521,15 @@ Seven fixtures:
 | `scope-clean.ts` | 0 — the name collisions a scope-blind rule would trip on |
 | `callsite-shape-gap.ts` | 4 — the `` `${d}T${t}` `` shape, where the time half is itself interpolated |
 | `suppression.ts` | 3 — the directives, not the 2 diagnostics they hide |
-| `locale-violations.ts` | 11 — zoneless date rendering |
+| `locale-violations.ts` | 15 — zoneless date rendering |
 | `locale-clean.ts` | 0 — number formatting, and options the rule cannot see |
+| `style-violations.tsx` | 12 — every spelling of the `style` prop, including the hoisted ones |
+| `style-clean.tsx` | 0 — `style` as a binding, key, param, and `className` |
+| `width-violations.tsx` | 16 — pixels, absolute and font-relative units, and hoisted constants |
+| `width-clean.tsx` | 0 — relative units, intrinsic keywords, host elements, grid reflow floors |
+
+Every fixture has to be clean for every rule but its own, which is why
+`style-clean.tsx` writes its layout props responsively.
 
 The clean halves matter more than the violation halves. A rule that produces
 false positives gets suppressed, and a suppressed rule protects nothing. Two of
