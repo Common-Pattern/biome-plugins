@@ -20,6 +20,7 @@ EXPECTED_SUPPRESSIONS=3
 EXPECTED_LOCALE_VIOLATIONS=15
 EXPECTED_STYLE_VIOLATIONS=12
 EXPECTED_WIDTH_VIOLATIONS=16
+EXPECTED_HOST_VIOLATIONS=16
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
@@ -86,5 +87,18 @@ expect "width-violations.tsx" "$(ox_count test/fixtures/width-violations.tsx)" "
 
 echo '==> ...and does NOT fire on relative units, intrinsic keywords, host elements, or a grid reflow floor'
 expect "width-clean.tsx     " "$(ox_count test/fixtures/width-clean.tsx)" 0
+
+# The only rule here that is "off" at the top level and switched on by an
+# `overrides` entry — it encodes a decision a directory took, not a mistake that
+# is always a mistake, so it has no useful global setting. That override is also
+# what exercises the options path: it is the one rule in this package that takes
+# any, and a `library`/`docs`/`allow` that failed to reach the rule would leave
+# it reporting a generic message rather than reporting nothing, which is the
+# harder failure to notice.
+echo "==> no-host-elements: every host element, including tags newer than most raw-HTML bans"
+expect "host-violations.tsx" "$(ox_count test/fixtures/host-violations.tsx)" "$EXPECTED_HOST_VIOLATIONS"
+
+echo '==> ...and does NOT fire on the allowlist, components, member expressions, fragments, or HTML in a string'
+expect "host-clean.tsx     " "$(ox_count test/fixtures/host-clean.tsx)" 0
 
 echo "OK"

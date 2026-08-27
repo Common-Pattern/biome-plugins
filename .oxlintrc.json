@@ -17,6 +17,18 @@
     "common-pattern/no-suppressions": "error",
     "common-pattern/no-zoneless-locale-format": "error",
     "common-pattern/no-style-prop": "error",
-    "common-pattern/no-pinned-width": "error"
-  }
+    "common-pattern/no-pinned-width": "error",
+    "common-pattern/no-host-elements": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/host-*.tsx"],
+      "rules": {
+        "common-pattern/no-host-elements": [
+          "error",
+          { "allow": ["html", "body"], "library": "@example/ui", "docs": "the conventions file" }
+        ]
+      }
+    }
+  ]
 }

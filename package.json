@@ -1,6 +1,6 @@
 {
   "name": "@common-pattern/lint",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Lint rules for conventions that are easy to state and easy to forget — ESLint-shaped rules for oxlint and ESLint",
   "license": "MIT",
   "type": "module",
@@ -31,6 +31,6 @@
     "test": "./test/run.sh"
   },
   "devDependencies": {
-    "oxlint": "^1.76.0"
+    "oxlint": "^1.80.0"
   }
 }
