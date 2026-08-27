@@ -40,6 +40,7 @@ them, and nothing else.
 | [`no-zoneless-locale-format`](#no-zoneless-locale-format) | rendering a date with no explicit `timeZone` |
 | [`no-style-prop`](#no-style-prop) | the JSX `style` prop, in any spelling |
 | [`no-pinned-width`](#no-pinned-width) | `width`/`maxWidth`/`minWidth` set to a fixed measure |
+| [`no-host-elements`](#no-host-elements) | raw HTML in JSX — every lowercase element, minus an allowlist |
 
 ### `no-utc-calendar-day`
 
@@ -405,6 +406,93 @@ route. Host elements are exempt: `<img width={800}>` is an intrinsic dimension,
 and on an image that attribute is what lets the browser reserve the right box
 before the file arrives, so banning it would trade a layout pin for layout shift.
 
+### `no-host-elements`
+
+Bans raw HTML in JSX — every lowercase (host) element, minus a stated
+allowlist.
+
+This one is for a directory that has committed to a component library
+*completely*: page chrome from the library's layout components, structure from
+its stack and grid components, text from its text component, and nothing
+hand-rolled out of `<div>`. There, a raw host element is a second layout system
+with one member, and it grows. It is the markup half of the door `no-style-prop`
+closes, and neither is much use alone — a `<div className="row">` needs no
+`style` prop to reintroduce a parallel layout vocabulary.
+
+**This is the only rule here that ships off, and the only one that takes
+options.** Both follow from the same thing. Every other rule encodes a mistake
+that is a mistake everywhere: a zoneless date is wrong in any file. This encodes
+a decision a *directory* took. A `<div>` in an ordinary React app is correct
+code, so the rule has no useful global setting — switch it on per-glob for the
+tree that made the commitment. And its message has to name the library the
+reader should use instead, which this package cannot know.
+
+```jsonc
+{
+  "rules": { "common-pattern/no-host-elements": "off" },
+  "overrides": [
+    {
+      "files": ["web/app/**", "web/lib/**"],
+      "rules": {
+        "common-pattern/no-host-elements": ["error", {
+          // Every entry is a claim that the library has no equivalent AND that
+          // the host element is unavoidable. Read it as a document.
+          "allow": ["html", "body", "form", "input", "meta"],
+          "library": "@astryxdesign/core",
+          "docs": "web/CLAUDE.md"
+        }]
+      }
+    }
+  ]
+}
+```
+
+**Why an allowlist and not a list of banned tags.** This is the whole design,
+and the reason the rule exists rather than a configured `react/forbid-elements`,
+which takes an enumeration of tags to forbid. Enumerating the forbidden side
+loses twice. HTML has well over a hundred elements and it gains more —
+`<dialog>`, `<search>` and `<selectedcontent>` all postdate plenty of "we banned
+raw HTML" commits — so a denylist is out-run by whatever tag the next person
+reaches for, and it fails **open**: the unlisted tag is silently fine. The
+permitted set is small, typically nought to five, and every member has a reason
+somebody can state. Enumerate that side instead, and a new tag is banned the day
+it ships with no edit to the rule.
+
+**Why a grep is not enough.** `grep '<div'` matches `<divider>`, matches the
+word in a comment, a string or a Markdown fixture, and misses `<div\n
+className=…>` where the attributes push the tag onto the next line. More to the
+point, it cannot answer the question the rule asks. That question is not "does
+this text appear" but "is this element a host element or a component", and it is
+syntactic: `<Card>` and `<card>` differ by one bit of casing and compile to
+entirely different things, and so do `<foo.bar>` (a component reference, always)
+and `<foo>` (the DOM, always). No pattern over source text decides that. The
+parser already has.
+
+**The allowlist is the rule's real content.** In the codebase this was written
+for it is five entries, and the shape of the reasons is the standard a sixth has
+to meet: `html`/`body` because a Next root layout must render the document
+element and there is nowhere else to get it; `form` because a Server Action
+submits through a native `<form action>` and the library's `FormLayout` is
+layout, not a submitting form; `input` because `<input type="hidden">` is the
+only way to carry a value into that submission, while every visible input still
+uses the library's `TextInput`; `meta` because document metadata is not UI, so no
+component library should have a component for it. An allowlist that grows
+without reasons of that kind is the ban switched off one tag at a time — worse
+than no rule, because the config still reads as though something is enforced.
+
+**Holes it leaves.** `React.createElement("div")` is not caught: the tag is a
+string argument, so this rule never sees it. `dangerouslySetInnerHTML` is not
+caught either — its content is an opaque string, and banning the attribute is a
+different rule with a different argument, about injection rather than layout
+vocabulary. Member expressions are not caught whatever their casing, because
+`<foo.bar />` compiles to `foo.bar` and never to the string `"foo.bar"`, so a
+namespaced component object (`<layout.Row />`) is correct code. Namespaced names
+(`<svg:circle />`) are not caught; React does not support them. Fragments are
+not elements. And a component held in a lowercase binding **is** caught, which
+is correct rather than a false positive: `const card = Card; <card />` renders
+`<card>` to the DOM, so the rule agrees with the runtime rather than with the
+author's intent.
+
 ## Install
 
 ```jsonc
@@ -441,7 +529,12 @@ before the file arrives, so banning it would trade a layout pin for layout shift
     "common-pattern/no-suppressions": "error",
     "common-pattern/no-zoneless-locale-format": "error",
     "common-pattern/no-style-prop": "error",
-    "common-pattern/no-pinned-width": "error"
+    "common-pattern/no-pinned-width": "error",
+
+    // Off by default, and switched on per-glob in `overrides` — it is the one
+    // rule here that encodes a directory's decision rather than a mistake, and
+    // the one that takes options. See `no-host-elements`.
+    "common-pattern/no-host-elements": "off"
   }
 }
 ```
@@ -511,7 +604,7 @@ pnpm install
 pnpm test
 ```
 
-Twelve fixtures:
+Fourteen fixtures:
 
 | fixture | asserts |
 | --- | --- |
@@ -527,6 +620,8 @@ Twelve fixtures:
 | `style-clean.tsx` | 0 — `style` as a binding, key, param, and `className` |
 | `width-violations.tsx` | 16 — pixels, absolute and font-relative units, and hoisted constants |
 | `width-clean.tsx` | 0 — relative units, intrinsic keywords, host elements, grid reflow floors |
+| `host-violations.tsx` | 16 — every host element, including tags newer than most raw-HTML bans |
+| `host-clean.tsx` | 0 — the allowlist, components, member expressions, fragments, HTML in a string |
 
 Every fixture has to be clean for every rule but its own, which is why
 `style-clean.tsx` writes its layout props responsively.
@@ -549,6 +644,12 @@ method name with number formatting, which is everywhere.
 3. Add it to the rule table above, to the config snippets in
    [Install](#install), and to `.oxlintrc.json` so this repo lints itself with
    it.
+   **If the rule takes options, declare `meta.schema`.** Oxlint follows ESLint
+   v9 here: without a schema it rejects any configured options outright
+   (*"Rule 'x' does not accept options"*), and with one it validates against it
+   and rejects an unknown property by name. That is the good failure — a
+   mistyped option is a config error rather than a silently ignored setting, so
+   there is no way to end up with a rule quietly running on its defaults.
 4. **Verify it actually fires** by planting a violation in a real consumer and
    watching the lint fail. Oxlint prints *nothing at all* on a clean run, so
    silence is not evidence — a plugin that failed to load looks exactly like one
