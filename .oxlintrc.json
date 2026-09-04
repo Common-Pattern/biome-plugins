@@ -18,7 +18,8 @@
     "common-pattern/no-zoneless-locale-format": "error",
     "common-pattern/no-style-prop": "error",
     "common-pattern/no-pinned-width": "error",
-    "common-pattern/no-host-elements": "off"
+    "common-pattern/no-host-elements": "off",
+    "common-pattern/no-comments": "off"
   },
   "overrides": [
     {
@@ -28,6 +29,12 @@
           "error",
           { "allow": ["html", "body"], "library": "@example/ui", "docs": "the conventions file" }
         ]
+      }
+    },
+    {
+      "files": ["**/comments-*.tsx", "**/comments-*.mjs"],
+      "rules": {
+        "common-pattern/no-comments": ["error", { "docs": "the conventions file" }]
       }
     }
   ]
