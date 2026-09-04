@@ -41,6 +41,7 @@ them, and nothing else.
 | [`no-style-prop`](#no-style-prop) | the JSX `style` prop, in any spelling |
 | [`no-pinned-width`](#no-pinned-width) | `width`/`maxWidth`/`minWidth` set to a fixed measure |
 | [`no-host-elements`](#no-host-elements) | raw HTML in JSX — every lowercase element, minus an allowlist |
+| [`no-comments`](#no-comments) | comments — every `//`, `/* */` and JSDoc block, minus what the toolchain reads |
 
 ### `no-utc-calendar-day`
 
@@ -419,10 +420,9 @@ with one member, and it grows. It is the markup half of the door `no-style-prop`
 closes, and neither is much use alone — a `<div className="row">` needs no
 `style` prop to reintroduce a parallel layout vocabulary.
 
-**This is the only rule here that ships off, and the only one that takes
-options.** Both follow from the same thing. Every other rule encodes a mistake
-that is a mistake everywhere: a zoneless date is wrong in any file. This encodes
-a decision a *directory* took. A `<div>` in an ordinary React app is correct
+**This rule ships off and takes options**, as `no-comments` does, and for the
+same reason. Every other rule encodes a mistake that is a mistake everywhere: a
+zoneless date is wrong in any file. This encodes a decision a *directory* took. A `<div>` in an ordinary React app is correct
 code, so the rule has no useful global setting — switch it on per-glob for the
 tree that made the commitment. And its message has to name the library the
 reader should use instead, which this package cannot know.
@@ -493,6 +493,81 @@ is correct rather than a false positive: `const card = Card; <card />` renders
 `<card>` to the DOM, so the rule agrees with the runtime rather than with the
 author's intent.
 
+### `no-comments`
+
+Bans comments — every `//`, every `/* */`, every JSDoc block, minus the ones a
+tool rather than a person reads.
+
+This is for a codebase that has decided its explanation belongs somewhere with a
+version, a date and an owner: a plan document, a commit message, an ADR. The
+argument is not that explanation is worthless. It is that a comment is the one
+place to put it where nothing checks it — the code around a comment moves, the
+comment does not, and a stale comment is worse than none because it is still
+read as current. Every other artefact that explains the code carries the date it
+was written. The comment is the only one that pretends to be about the line it
+sits on today.
+
+Like `no-host-elements`, it ships **off** and is switched on per-glob. A comment
+in an ordinary codebase is correct code, so there is no useful global setting.
+
+```jsonc
+{
+  "rules": { "common-pattern/no-comments": "off" },
+  "overrides": [
+    {
+      "files": ["web/app/**", "web/lib/**"],
+      "rules": {
+        "common-pattern/no-comments": ["error", {
+          "docs": "web/CLAUDE.md",
+          // Regex sources, matched against the comment body. For a pragma the
+          // built-in list does not know about.
+          "allow": ["^\\s*@custom-pragma\\b"]
+        }]
+      }
+    }
+  ]
+}
+```
+
+**Why a linter and not a one-off codemod.** Stripping the comments is the easy
+half and it happens once; the convention is what has to survive the next six
+months of pull requests, and a convention nothing enforces lasts about as long
+as the people who read it. The strip is also not repeatable by hand — a regex
+over source text eats the `//` inside a URL string, the `/*` inside a regex
+literal, and the contents of a template literal. That is the second reason to
+want a parser here, in the codemod as well as in the rule.
+
+**What is not a comment, even though it is spelt like one.** This is the rule's
+whole risk: a comment the toolchain *reads* is input, and deleting it changes
+what the program does with no diagnostic at the deletion site. Exempt, each
+because its audience is a machine:
+
+| exempt | why |
+| --- | --- |
+| `#!/usr/bin/env node` | the kernel picks the interpreter with it; parsers merely hand it over as a comment |
+| `/// <reference … />` | TypeScript compiler input — it adds files to the program |
+| `@jsxImportSource`, `@jsx`, `@jsxRuntime` | selects the JSX factory |
+| `webpackChunkName:` and the other magic comments, `@vite-ignore` | read by the bundler |
+| `@__PURE__`, `@__NO_SIDE_EFFECTS__` | what lets a minifier drop a call |
+| `@vitest-environment`, `@jest-environment` | decides which environment a test file runs in |
+| `@license`, `@preserve`, and the `/*!` banner | minifiers keep them on purpose, and a licence may require it |
+| `/** @type {…} */` **in a `.js`/`.mjs`/`.cjs` file** | there the JSDoc *is* the type annotation; under `checkJs` deleting it deletes the check |
+
+That last one is the only exemption that depends on the filename, and it is
+scoped to type-carrying tags: prose in a JavaScript file is still prose and is
+still reported. In a `.ts` file `@type` is decoration over a real annotation, so
+it is reported there too.
+
+**Suppressions are deliberately not exempt.** `// oxlint-disable`,
+`// biome-ignore` and `// @ts-expect-error` are read by a tool and would qualify
+under that reasoning, but `no-suppressions` bans them outright and exempting
+them here would make this the one place the ban looks lifted. A file that trips
+both gets two diagnostics, which is right — they are two different objections.
+
+**The hole it cannot close** is `no-suppressions`' hole: oxlint's own disable
+directives silence custom JS-plugin rules and there is no `noInlineConfig`. Switch
+the two rules on together.
+
 ## Install
 
 ```jsonc
@@ -531,10 +606,11 @@ author's intent.
     "common-pattern/no-style-prop": "error",
     "common-pattern/no-pinned-width": "error",
 
-    // Off by default, and switched on per-glob in `overrides` — it is the one
-    // rule here that encodes a directory's decision rather than a mistake, and
-    // the one that takes options. See `no-host-elements`.
-    "common-pattern/no-host-elements": "off"
+    // Off by default, and switched on per-glob in `overrides` — these are the
+    // two rules here that encode a directory's decision rather than a mistake,
+    // and the two that take options. See `no-host-elements` and `no-comments`.
+    "common-pattern/no-host-elements": "off",
+    "common-pattern/no-comments": "off"
   }
 }
 ```
@@ -559,7 +635,7 @@ export default [
       "common-pattern/no-glued-timestamps": "error",
       "common-pattern/no-glued-timestamp-via-variable": "error",
       "common-pattern/no-double-assertion": "error",
-      "common-pattern/no-suppressions": "error",
+        "common-pattern/no-suppressions": "error",
       "common-pattern/no-zoneless-locale-format": "error",
       "common-pattern/no-style-prop": "error",
       "common-pattern/no-pinned-width": "error",
@@ -604,7 +680,7 @@ pnpm install
 pnpm test
 ```
 
-Fourteen fixtures:
+Eighteen fixtures:
 
 | fixture | asserts |
 | --- | --- |
@@ -622,6 +698,10 @@ Fourteen fixtures:
 | `width-clean.tsx` | 0 — relative units, intrinsic keywords, host elements, grid reflow floors |
 | `host-violations.tsx` | 16 — every host element, including tags newer than most raw-HTML bans |
 | `host-clean.tsx` | 0 — the allowlist, components, member expressions, fragments, HTML in a string |
+| `comments-violations.tsx` | 10 — every shape, including the JSX container and a JSDoc type tag in TypeScript |
+| `comments-violations.mjs` | 3 — prose in a JavaScript file, where only type-carrying tags are exempt |
+| `comments-clean.tsx` | 0 — directives, pragmas, licence banners, and comment-shaped text in a string, template or regex |
+| `comments-clean.mjs` | 0 — a hashbang, and the JSDoc that IS the type annotation |
 
 Every fixture has to be clean for every rule but its own, which is why
 `style-clean.tsx` writes its layout props responsively.

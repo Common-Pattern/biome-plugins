@@ -21,6 +21,8 @@ EXPECTED_LOCALE_VIOLATIONS=15
 EXPECTED_STYLE_VIOLATIONS=12
 EXPECTED_WIDTH_VIOLATIONS=16
 EXPECTED_HOST_VIOLATIONS=16
+EXPECTED_COMMENT_VIOLATIONS=10
+EXPECTED_COMMENT_JS_VIOLATIONS=3
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
@@ -100,5 +102,21 @@ expect "host-violations.tsx" "$(ox_count test/fixtures/host-violations.tsx)" "$E
 
 echo '==> ...and does NOT fire on the allowlist, components, member expressions, fragments, or HTML in a string'
 expect "host-clean.tsx     " "$(ox_count test/fixtures/host-clean.tsx)" 0
+
+# Off at the top level like `no-host-elements`, and for the same reason — it
+# encodes a decision a directory took. Every other fixture in this suite is
+# written in comments, so a global setting would bury their counts under this
+# rule's.
+echo "==> no-comments: every shape, including the JSX container and a JSDoc type tag in TypeScript"
+expect "comments-violations.tsx" "$(ox_count test/fixtures/comments-violations.tsx)" "$EXPECTED_COMMENT_VIOLATIONS"
+
+echo "==> ...and prose in a JavaScript file, where only type-carrying tags are exempt"
+expect "comments-violations.mjs" "$(ox_count test/fixtures/comments-violations.mjs)" "$EXPECTED_COMMENT_JS_VIOLATIONS"
+
+echo '==> ...and does NOT fire on directives, pragmas, licence banners, or a comment inside a string, template or regex'
+expect "comments-clean.tsx     " "$(ox_count test/fixtures/comments-clean.tsx)" 0
+
+echo '==> ...nor on a hashbang, nor on the JSDoc that IS the type annotation in a .mjs'
+expect "comments-clean.mjs     " "$(ox_count test/fixtures/comments-clean.mjs)" 0
 
 echo "OK"
