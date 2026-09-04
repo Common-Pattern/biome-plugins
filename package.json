@@ -1,6 +1,6 @@
 {
   "name": "@common-pattern/lint",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Lint rules for conventions that are easy to state and easy to forget \u2014 ESLint-shaped rules for oxlint and ESLint",
   "license": "MIT",
   "type": "module",

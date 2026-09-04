@@ -253,6 +253,7 @@ where `E` is the caught binding:
 | `c.json({ error: X })`, `{ errors: X }` | any `.json(…)` method call — Hono's `c.json` and Express's `res.json` alike |
 | `new Response(X, …)` | the body argument |
 | `return { …, message: X }` | an object literal **in return position** with a property named `message`, `error`, `errors` or `reason` — the Next.js Server Action shape |
+| `recordFailure({ reason: X })` | an object literal argument, with one of those same four keys, to a function named in the `sinks` option — silent unless you configure it |
 
 …where `X` is `E`, `E.message`, or the wrappings people reach for around them:
 a conditional (`E instanceof Error ? E.message : "…"`), an array literal, a
@@ -308,6 +309,53 @@ process; the rule is what stops individual handlers routing around it.
 hatch — every call already is one — so the option changes the message and
 nothing else. It earns its place because naming the wrong helper in a report is
 how a rule teaches the wrong habit.
+
+`sinks` is the third, and the only one that changes what is reported. It names
+functions whose object-literal arguments are response bodies:
+
+```jsonc
+["error", { "sinks": ["recordPlatformActionFailure"], "docs": "CLAUDE.md" }]
+```
+
+```ts
+} catch (err) {
+  await recordPlatformActionFailure({
+    orgId,
+    reason: err instanceof Error ? err.message : String(err),   // reported here
+  });
+  throw err;
+}
+```
+
+That call writes its `reason` into an `audit_events.data.reason` column, and a
+serializer serves that column back out through three listing endpoints. There
+is no response object at the call site at all — it is stored, and then served,
+on some later request nobody was looking at. Six of these were in one codebase,
+and the rule stepped past every one of them, because a call is the escape
+hatch.
+
+**It defaults to `[]`, and this is opt-in rather than a heuristic**, which is
+the honest description of it rather than an apology for it.
+`logger.error({ err, message: err.message })` has the identical shape and is an
+explicit non-goal of this rule — the server log is where the full error
+belongs. Nothing in the source text separates a persistence call from a logging
+one, so **the author names the sinks or gets nothing**; the rule will not infer
+it from the callee
+name, and a denylist of logger-ish names would be the same guess with a longer
+config. This is the shape [`no-host-elements`](#no-host-elements) takes for the
+same reason: the list is the content, and the tool does not get to invent it.
+
+What you are asserting when you add a name is something **the linter cannot
+have**: that what goes into this function comes back out to someone. A rule can
+see the write. It cannot see the round-trip — there is no edge in any syntax
+tree from a column to the endpoint that serves it. `sinks` is where you supply
+that edge, and it is worth only as much as the reading behind each name.
+
+Only object-literal arguments are checked, in any position, and only for the
+four response keys. A positional argument has no key to test, and the escape
+hatch stands everywhere the config has not spoken — including inside a named
+sink, so `recordPlatformActionFailure({ reason: clientMessage(err, "…") })` is
+the fix and is silent.
 
 ### `no-suppressions`
 
@@ -784,8 +832,8 @@ Twenty fixtures:
 | `scope-clean.ts` | 0 — the name collisions a scope-blind rule would trip on |
 | `callsite-shape-gap.ts` | 4 — the `` `${d}T${t}` `` shape, where the time half is itself interpolated |
 | `suppression.ts` | 3 — the directives, not the 2 diagnostics they hide |
-| `response-violations.ts` | 16 — every shape that puts a caught error in a response body |
-| `response-clean.ts` | 0 — logging, rethrowing, and a value routed through any helper |
+| `response-violations.ts` | 20 — every shape that puts a caught error in a response body, and four that put one into a configured `sinks` call |
+| `response-clean.ts` | 0 — logging, rethrowing, a value routed through any helper, and the same object literal handed to a function `sinks` does not name |
 | `locale-violations.ts` | 15 — zoneless date rendering |
 | `locale-clean.ts` | 0 — number formatting, and options the rule cannot see |
 | `style-violations.tsx` | 12 — every spelling of the `style` prop, including the hoisted ones |
@@ -808,7 +856,10 @@ them are load-bearing in particular: `scope-clean.ts` is why the scope rule is
 writable at all, and `locale-clean.ts` is why the locale rule is — it shares a
 method name with number formatting, which is everywhere. `response-clean.ts` is
 the third: a rule that flagged `console.error(err)` would be asking people to
-make their own logs useless, and would be turned off within a day.
+make their own logs useless, and would be turned off within a day. It carries
+the pair the `sinks` option stands on — `logFailure({ orgId, reason })` and
+`recordPlatformActionFailure({ orgId, reason })`, the same key holding the same
+value, one of them named in the config and one not.
 
 ## Adding a rule
 

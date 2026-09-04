@@ -183,3 +183,68 @@ export async function leakingOnOneBranchOnly(input: unknown, verbose: boolean) {
     throw new HttpError(422, [msg]); // no-error-message-to-response
   }
 }
+
+// ---------------------------------------------------------------------------
+// 8. Stored, then served. A call is the rule's escape hatch, so these need the
+//    `sinks` option to name the function — see `.oxlintrc.json`, which passes
+//    `recordPlatformActionFailure` and `recordFailure` for these fixtures.
+//
+//    `recordPlatformActionFailure` writes its `reason` into an
+//    `audit_events.data.reason` column, and a serializer serves that column
+//    back out through three listing endpoints. No response object appears at
+//    the call site, which is what makes it the worst-shaped leak of the set:
+//    the disclosure happens on a request nobody was looking at.
+// ---------------------------------------------------------------------------
+declare function recordPlatformActionFailure(input: {
+  orgId: string;
+  reason?: string;
+  message?: string;
+}): Promise<void>;
+declare const audit: { recordFailure(input: unknown): Promise<void> };
+declare function recordAuditEvent(orgId: string, data: unknown): Promise<void>;
+
+export async function recordsTheFailureReason(orgId: string) {
+  try {
+    return await createMember({ orgId });
+  } catch (err) {
+    await recordPlatformActionFailure({
+      orgId,
+      reason: err instanceof Error ? err.message : String(err), // no-error-message-to-response
+    });
+    throw err;
+  }
+}
+
+// The sink reached through a member expression. The property name is what is
+// matched, so `audit.recordFailure` and a bare `recordFailure` are one entry.
+export async function recordsThroughAnObject(orgId: string) {
+  try {
+    return await createMember({ orgId });
+  } catch (err) {
+    await audit.recordFailure({ orgId, message: (err as Error).message }); // no-error-message-to-response
+    throw err;
+  }
+}
+
+// The object literal is not the first argument. Every argument is checked —
+// the payload's position in a signature is not something a rule gets to assume.
+export async function recordsInASecondArgument(orgId: string) {
+  try {
+    return await createMember({ orgId });
+  } catch (err) {
+    await recordAuditEvent(orgId, { error: (err as Error).message }); // no-error-message-to-response
+    throw err;
+  }
+}
+
+// The binding hop, and the shorthand property that hides it. `reason` holds
+// the ternary, and `{ orgId, reason }` looks like it holds a chosen string.
+export async function recordsViaABinding(orgId: string) {
+  try {
+    return await createMember({ orgId });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "The action failed";
+    await recordPlatformActionFailure({ orgId, reason }); // no-error-message-to-response
+    throw err;
+  }
+}

@@ -17,7 +17,7 @@ EXPECTED_VIOLATIONS=15
 EXPECTED_SCOPE_VIOLATIONS=9
 EXPECTED_CALLSITE_GAP=4
 EXPECTED_SUPPRESSIONS=3
-EXPECTED_RESPONSE_VIOLATIONS=16
+EXPECTED_RESPONSE_VIOLATIONS=20
 EXPECTED_LOCALE_VIOLATIONS=15
 EXPECTED_STYLE_VIOLATIONS=12
 EXPECTED_WIDTH_VIOLATIONS=16
@@ -73,10 +73,10 @@ echo "==> disable directives silence custom rules, and no-suppressions catches t
 expect "suppression.ts (the 3 directives, not the 2 dates they hide)" \
   "$(ox_count test/fixtures/suppression.ts)" "$EXPECTED_SUPPRESSIONS"
 
-echo "==> no-error-message-to-response: every shape that puts a caught error in a response body"
+echo "==> no-error-message-to-response: every shape that puts a caught error in a response body, plus the configured sinks"
 expect "response-violations.ts" "$(ox_count test/fixtures/response-violations.ts)" "$EXPECTED_RESPONSE_VIOLATIONS"
 
-echo '==> ...and does NOT fire on logging, on a rethrow, or on a value routed through any helper'
+echo '==> ...and does NOT fire on logging, on a rethrow, on a value routed through any helper, or on an unnamed function taking the same object'
 expect "response-clean.ts     " "$(ox_count test/fixtures/response-clean.ts)" 0
 
 echo "==> no-zoneless-locale-format"

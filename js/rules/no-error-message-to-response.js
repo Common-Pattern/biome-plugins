@@ -42,6 +42,10 @@
  *   - an object literal IN RETURN POSITION with a property named `message`,
  *     `error`, `errors` or `reason` — the Next.js Server Action shape,
  *     `return { ok: false, message: e.message }`
+ *   - an object literal passed to a function the `sinks` option names, with
+ *     one of those same four keys — `recordFailure({ reason: E.message })`,
+ *     where the function writes that value somewhere an endpoint later serves
+ *     back out. Empty by default; see the schema for why it has to be.
  * …where `X` is `E`, `E.message`, or any of the wrappings people reach for
  * around them: a conditional (`E instanceof Error ? E.message : "…"`), an
  * array literal, a template literal, `+` concatenation, `??`/`||` with a
@@ -68,7 +72,8 @@
  *     `userFacingMessage(err.message)`, `formStateFromError(err)`,
  *     `redact(String(err))` all pass. A rule with no cheap way to say "I have
  *     handled this" gets suppressed wholesale, and a suppressed rule protects
- *     nothing.
+ *     nothing. Naming a function in `sinks` is the one way to take a call back
+ *     out of the hatch, and only for its object-literal arguments.
  *
  * SCOPE, AND THE BOUNDARY IT SITS ON. The error has to reach the response
  * through a plain binding. Passing it into a helper, storing it on an object
@@ -153,6 +158,29 @@ export default {
            * wrong habit.
            */
           sanitizers: { type: "array", items: { type: "string" }, uniqueItems: true },
+          /**
+           * Functions whose object-literal arguments are response bodies.
+           * `recordPlatformActionFailure({ orgId, reason: err.message })`
+           * writes that `reason` to a column three listing endpoints serve
+           * back out: stored, then served, with no response object in sight
+           * at the call site.
+           *
+           * EMPTY BY DEFAULT, and this is opt-in rather than a heuristic
+           * because there is no syntactic difference between that call and
+           * `logger.error({ err, message: err.message })`, which is an
+           * explicit non-goal of this rule. Nothing in the source text
+           * separates a persistence call from a logging one, so the author
+           * names the sinks or gets nothing. Inferring from the callee name,
+           * or carrying a denylist of logger-ish names, would be a guess
+           * wearing the clothes of a rule — the same reason
+           * `no-host-elements` takes an `allow` list rather than deciding for
+           * itself which tags a codebase means.
+           *
+           * A name here is an assertion the linter cannot check: "what goes
+           * into this function comes back out to someone". A rule can see the
+           * write. It cannot see the round-trip.
+           */
+          sinks: { type: "array", items: { type: "string" }, uniqueItems: true },
           /** Where the convention is written down, e.g. "api-ts/CLAUDE.md". */
           docs: { type: "string" },
         },
@@ -163,7 +191,8 @@ export default {
 
   create(context) {
     const sourceCode = context.sourceCode;
-    const { sanitizers = DEFAULT_SANITIZERS, docs } = context.options[0] ?? {};
+    const { sanitizers = DEFAULT_SANITIZERS, sinks = [], docs } = context.options[0] ?? {};
+    const sinkNames = new Set(sinks);
 
     /**
      * Functions passed to `.catch(cb)` or as the rejection half of
@@ -338,6 +367,30 @@ export default {
               for (const property of carryingProperties(body, new Set())) report(property.value);
             } else if (body != null && carries(body, new Set())) {
               report(body);
+            }
+          }
+        }
+
+        // A function the config named as a sink, by bare identifier or by the
+        // property name of a member expression (`audit.recordFailure`). Its
+        // object literals are response bodies because the author said so, and
+        // are then checked exactly as one in return position is.
+        //
+        // Only object literals, and only the response keys. A positional
+        // argument has no key to test, and the escape hatch stands everywhere
+        // the config has not spoken.
+        if (sinkNames.size > 0) {
+          const name =
+            callee?.type === "Identifier"
+              ? callee.name
+              : callee?.type === "MemberExpression"
+                ? staticPropertyName(callee)
+                : null;
+          if (name != null && sinkNames.has(name)) {
+            for (const argument of node.arguments ?? []) {
+              const body = unwrap(argument);
+              if (body?.type !== "ObjectExpression") continue;
+              for (const property of carryingProperties(body, new Set())) report(property.value);
             }
           }
         }
