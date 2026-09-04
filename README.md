@@ -36,6 +36,7 @@ them, and nothing else.
 | [`no-glued-timestamps`](#no-glued-timestamps) | building a timestamp by interpolation, at the call site |
 | [`no-glued-timestamp-via-variable`](#no-glued-timestamp-via-variable) | the same glue, reaching a date consumer through a variable |
 | [`no-double-assertion`](#no-double-assertion) | `x as unknown as T` |
+| [`no-error-message-to-response`](#no-error-message-to-response) | a caught error, or its `.message`, sent to the client |
 | [`no-suppressions`](#no-suppressions) | every spelling of "ignore this diagnostic" |
 | [`no-zoneless-locale-format`](#no-zoneless-locale-format) | rendering a date with no explicit `timeZone` |
 | [`no-style-prop`](#no-style-prop) | the JSX `style` prop, in any spelling |
@@ -216,6 +217,97 @@ directories are inside the linted set before adopting it. Under oxlint you can
 scope it off for a glob with `overrides`. The better answer is usually to write
 the one checked cast inside a helper whose parameter type is *derived from* the
 target, so no `unknown` bridge is needed anywhere.
+
+### `no-error-message-to-response`
+
+Bans a caught error — or its `.message` — reaching a client-facing response:
+
+```ts
+} catch (err) {
+  const msg = err instanceof Error ? err.message : "Failed to create member";
+  throw new HttpError(422, [msg]);   // reported here
+}
+```
+
+That reads as diligence, and what it actually sends is not the author's
+choice. Since drizzle-orm 0.41 a failed query arrives as a `DrizzleQueryError`
+whose `.message` is `Failed query: <the whole statement>` followed by
+`params: <every bound value>`, so the branch meant to surface "email already
+taken" surfaces the SQL, the schema and whatever values the request carried,
+to whoever made the request. Most drivers do the same — `pg`, `mysql2`,
+`ioredis`, the AWS SDK, `node-fetch` on a DNS failure. One codebase shipped
+this in ~30 handlers before anyone read a 422 body closely.
+
+It needs to be a rule rather than a review note because the fix is mechanical
+and the mistake is not. `err.message` is the obvious thing to write, it is
+right for the errors the author had in mind, and the leak is invisible to every
+test that asserts on a status code — so it comes back, in a new handler, six
+weeks after the pull-request comment that caught the last one.
+
+**Flagged**, inside a `catch` block or a `.catch(cb)` / `.then(ok, cb)` handler,
+where `E` is the caught binding:
+
+| sink | shape |
+| --- | --- |
+| `new HttpError(<status>, X)` | any argument after the status |
+| `c.json({ error: X })`, `{ errors: X }` | any `.json(…)` method call — Hono's `c.json` and Express's `res.json` alike |
+| `new Response(X, …)` | the body argument |
+| `return { …, message: X }` | an object literal **in return position** with a property named `message`, `error`, `errors` or `reason` — the Next.js Server Action shape |
+
+…where `X` is `E`, `E.message`, or the wrappings people reach for around them:
+a conditional (`E instanceof Error ? E.message : "…"`), an array literal, a
+template literal, `+` concatenation, `??`/`||` with a fallback, a nested
+object, or a binding in scope written from any of those.
+
+Return position is the whole test for that last one, and it is what makes it
+usable. An object literal with a `message` key is not by itself a response; it
+is also how a browser component holds what it is about to render. The version
+that looked at *every* object literal was run over a real app and reported two
+client components building `result = { status: "failed", message: … }` from a
+failed action call — already on the client, nothing disclosed, and exactly the
+finding that gets a rule switched off. What a function returns crosses a
+boundary; what it assigns to a local does not. `const state = {…}; return
+state;` is still caught, because the returned identifier resolves to the
+binding.
+
+**Not flagged, and each of these is load-bearing:**
+
+- `console.error(err)`, `logger.error({ err })`, Sentry — any logging call. The
+  server log is where the full error *belongs*; a rule that pushed people to
+  redact it there would trade a disclosure bug for an undebuggable one.
+- `throw err`, and `throw new Error(…, { cause: err })`. Rethrowing defers to
+  the error handler, which is the layer that owns this decision.
+- A bare `return err.message` from an ordinary function. That is a value being
+  passed along, not a response body — it is how a sanitizer is written, and how
+  a CLI wrapper hands a subprocess failure back to its own caller. Only the
+  object shape counts in return position.
+- `E.message` passed to **any** call expression other than the sinks above.
+  This is the escape hatch and it is deliberately generous: a call is where a
+  human made a decision about this value, and the rule cannot tell a good
+  decision from a bad one. `clientMessage(err, "…")`,
+  `userFacingMessage(err.message)`, `formStateFromError(err)`,
+  `redact(String(err))` all pass. A rule with no cheap way to say "handled"
+  gets suppressed wholesale, and a suppressed rule protects nothing.
+
+**Deliberately not checked:** the error has to reach the response through a
+plain binding. Passing it into a helper, storing it on an object that is later
+spread, or pushing it through an array all escape the rule — following those
+needs data-flow analysis rather than scope analysis, the same boundary
+[`no-glued-timestamp-via-variable`](#no-glued-timestamp-via-variable) sits on
+and for the same reason. In practice the binding hop is the shape that occurs,
+because the `const msg = …` line exists precisely to hold the ternary.
+
+The corollary is that **this is not a security boundary and must not be sold as
+one.** It catches the spelling that shows up in review, on the day it is
+written. The boundary is one error handler that decides what leaves the
+process; the rule is what stops individual handlers routing around it.
+
+**Options.** `sanitizers` names the helpers the diagnostic recommends
+(default `["clientMessage", "userFacingMessage", "formStateFromError"]`), and
+`docs` names where the convention is written down. Neither widens the escape
+hatch — every call already is one — so the option changes the message and
+nothing else. It earns its place because naming the wrong helper in a report is
+how a rule teaches the wrong habit.
 
 ### `no-suppressions`
 
@@ -601,6 +693,7 @@ the two rules on together.
     "common-pattern/no-glued-timestamps": "error",
     "common-pattern/no-glued-timestamp-via-variable": "error",
     "common-pattern/no-double-assertion": "error",
+    "common-pattern/no-error-message-to-response": "error",
     "common-pattern/no-suppressions": "error",
     "common-pattern/no-zoneless-locale-format": "error",
     "common-pattern/no-style-prop": "error",
@@ -635,7 +728,8 @@ export default [
       "common-pattern/no-glued-timestamps": "error",
       "common-pattern/no-glued-timestamp-via-variable": "error",
       "common-pattern/no-double-assertion": "error",
-        "common-pattern/no-suppressions": "error",
+      "common-pattern/no-error-message-to-response": "error",
+      "common-pattern/no-suppressions": "error",
       "common-pattern/no-zoneless-locale-format": "error",
       "common-pattern/no-style-prop": "error",
       "common-pattern/no-pinned-width": "error",
@@ -680,7 +774,7 @@ pnpm install
 pnpm test
 ```
 
-Eighteen fixtures:
+Twenty fixtures:
 
 | fixture | asserts |
 | --- | --- |
@@ -690,6 +784,8 @@ Eighteen fixtures:
 | `scope-clean.ts` | 0 — the name collisions a scope-blind rule would trip on |
 | `callsite-shape-gap.ts` | 4 — the `` `${d}T${t}` `` shape, where the time half is itself interpolated |
 | `suppression.ts` | 3 — the directives, not the 2 diagnostics they hide |
+| `response-violations.ts` | 16 — every shape that puts a caught error in a response body |
+| `response-clean.ts` | 0 — logging, rethrowing, and a value routed through any helper |
 | `locale-violations.ts` | 15 — zoneless date rendering |
 | `locale-clean.ts` | 0 — number formatting, and options the rule cannot see |
 | `style-violations.tsx` | 12 — every spelling of the `style` prop, including the hoisted ones |
@@ -710,7 +806,9 @@ The clean halves matter more than the violation halves. A rule that produces
 false positives gets suppressed, and a suppressed rule protects nothing. Two of
 them are load-bearing in particular: `scope-clean.ts` is why the scope rule is
 writable at all, and `locale-clean.ts` is why the locale rule is — it shares a
-method name with number formatting, which is everywhere.
+method name with number formatting, which is everywhere. `response-clean.ts` is
+the third: a rule that flagged `console.error(err)` would be asking people to
+make their own logs useless, and would be turned off within a day.
 
 ## Adding a rule
 

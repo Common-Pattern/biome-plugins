@@ -51,6 +51,7 @@
  */
 
 import { isGluedDateTime, isGluedOffset } from "../lib/glue.js";
+import { resolveVariable, writesTo } from "../lib/scope.js";
 
 /**
  * Calls whose first argument is read as a moment in time, and which therefore
@@ -80,51 +81,6 @@ function messageFor(consumer, variableName, kind) {
       ? `\`${variableName}\` is built by pasting a hard-coded numeric UTC offset onto a date string`
       : `\`${variableName}\` is a timestamp glued together from a date and a time`;
   return `${what}, and it reaches ${consumer} here. The glue happens outside any timezone, so the moment this produces is the runtime's, not the tenant's — and holding it in a variable first hides that from the call site. Build the instant from the calendar date and the wall clock in one step, with the zone as an argument: toDate(dayKey, { timeZone }), or TZDate.tz(timeZone, year, monthIndex, day, hours, minutes).`;
-}
-
-/**
- * Resolve an identifier to the binding it actually refers to.
- *
- * Preferred path is the `Reference` recorded for this exact identifier, which
- * is scope analysis's own answer and needs no name matching at all. Nodes are
- * compared by source range rather than object identity, because the plugin
- * host is free to hand out fresh wrapper objects for the same AST node and
- * `===` would then quietly always be false — a failure that looks exactly like
- * "the rule found nothing".
- *
- * The fallback walks the scope chain by name, innermost first, which is the
- * same shadowing rule the language uses.
- */
-function resolveVariable(sourceCode, identifier) {
-  const start = sourceCode.getScope(identifier);
-
-  for (let scope = start; scope != null; scope = scope.upper) {
-    for (const reference of scope.references ?? []) {
-      const id = reference.identifier;
-      if (id != null && id.start === identifier.start && id.end === identifier.end) {
-        if (reference.resolved != null) return reference.resolved;
-      }
-    }
-  }
-
-  for (let scope = start; scope != null; scope = scope.upper) {
-    const found = (scope.variables ?? []).find((v) => v.name === identifier.name);
-    if (found != null) return found;
-  }
-
-  return null;
-}
-
-/** Every expression ever written into this binding. */
-function writesTo(variable) {
-  const writes = [];
-  for (const def of variable.defs ?? []) {
-    if (def.node?.type === "VariableDeclarator" && def.node.init != null) writes.push(def.node.init);
-  }
-  for (const reference of variable.references ?? []) {
-    if (reference.writeExpr != null) writes.push(reference.writeExpr);
-  }
-  return writes;
 }
 
 /**
