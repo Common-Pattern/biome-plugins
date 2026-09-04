@@ -24,6 +24,18 @@
   },
   "overrides": [
     {
+      "files": ["**/response-*.ts"],
+      "rules": {
+        "common-pattern/no-error-message-to-response": [
+          "error",
+          {
+            "sinks": ["recordPlatformActionFailure", "recordFailure", "recordAuditEvent"],
+            "docs": "the conventions file"
+          }
+        ]
+      }
+    },
+    {
       "files": ["**/host-*.tsx"],
       "rules": {
         "common-pattern/no-host-elements": [

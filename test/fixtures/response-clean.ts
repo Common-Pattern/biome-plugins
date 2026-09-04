@@ -214,3 +214,66 @@ export async function echoesItsOwnInput(name: string) {
     return { ok: false as const, message: `Could not create ${name}` };
   }
 }
+
+// ---------------------------------------------------------------------------
+// 9. The `sinks` option, and the pair that decides whether it can exist at
+//    all. `.oxlintrc.json` names `recordPlatformActionFailure`,
+//    `recordFailure` and `recordAuditEvent` as sinks for these fixtures.
+//
+//    `logFailure` below takes the identical object literal, with the identical
+//    key, holding the identical value, and is not named. It has to stay
+//    silent, because it is a log — and the only thing that separates it from
+//    the sink is that a human said so. A rule that guessed here would either
+//    flag every logging call or catch none of them.
+// ---------------------------------------------------------------------------
+declare function recordPlatformActionFailure(input: {
+  orgId: string;
+  reason?: string;
+  message?: string;
+}): Promise<void>;
+declare const audit: { recordFailure(input: unknown): Promise<void> };
+declare function recordAuditEvent(orgId: string, data: unknown): Promise<void>;
+declare function logFailure(input: unknown): void;
+
+export async function logsTheFailureReason(orgId: string) {
+  try {
+    return await createMember({ orgId });
+  } catch (err) {
+    logFailure({ orgId, reason: err instanceof Error ? err.message : String(err) });
+    logger.error({ err, message: err instanceof Error ? err.message : String(err) });
+    throw err;
+  }
+}
+
+// A named sink, sanitised. The escape hatch works the same inside a sink's
+// payload as it does anywhere else — this is the fix the diagnostic asks for,
+// and it has to be silent or the rule has told people to do something it then
+// reports.
+export async function recordsASanitisedReason(orgId: string) {
+  try {
+    return await createMember({ orgId });
+  } catch (err) {
+    await recordPlatformActionFailure({ orgId, reason: clientMessage(err, "The action failed") });
+    await audit.recordFailure({ orgId, message: userFacingMessage(String(err)) });
+    throw err;
+  }
+}
+
+// A named sink carrying a reason the author chose, and one carrying keys that
+// are not response keys at all.
+export async function recordsAChosenReason(orgId: string) {
+  try {
+    return await createMember({ orgId });
+  } catch (err) {
+    console.error(err);
+    await recordAuditEvent(orgId, { action: "create_member", reason: "unique_violation" });
+    throw err;
+  }
+}
+
+// A named sink outside any catch, holding a `reason` that came from a
+// parameter of the same name. Nothing was caught here, so there is no error
+// binding to carry — the sink list widens the sinks, not the sources.
+export async function recordsACallerSuppliedReason(orgId: string, err: string) {
+  await recordPlatformActionFailure({ orgId, reason: err });
+}
